@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import CardView from '@/components/CardView';
 import { Card, BattleMonster, Difficulty, BattleLog } from '@/lib/types';
-import { CARDS, ATTR_NAMES, getCardById } from '@/lib/cards';
-import { createBattleMonster, calcDamage, generateCpuTeam, cpuChooseAction, getTypeMultiplier } from '@/lib/battle';
+import { getCardById } from '@/lib/cards';
+import { createBattleMonster, calcDamage, generateCpuTeam, cpuChooseAction } from '@/lib/battle';
 import { loadData, recordWin, recordLoss } from '@/lib/storage';
+import { HiraganaQuiz, generateQuiz } from '@/lib/hiragana';
 
 type Phase = 'select' | 'difficulty' | 'battle' | 'result';
 
@@ -29,6 +31,12 @@ export default function BattlePage() {
   const [damagePopCpu, setDamagePopCpu] = useState<number | null>(null);
   const [processing, setProcessing] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
+
+  // ひらがなクイズ状態
+  const [quiz, setQuiz] = useState<HiraganaQuiz | null>(null);
+  const [pendingAction, setPendingAction] = useState<'attack' | 'skill' | null>(null);
+  const [quizResult, setQuizResult] = useState<'correct' | 'wrong' | null>(null);
+  const [quizScore, setQuizScore] = useState({ correct: 0, total: 0 });
 
   useEffect(() => {
     const data = loadData();
@@ -64,31 +72,26 @@ export default function BattlePage() {
     setCpuActive(0);
     setLogs([]);
     setBattleOver(false);
+    setQuizScore({ correct: 0, total: 0 });
 
-    // SPD で先攻判定
     const playerFirst = pTeam[0].card.spd >= cTeam[0].card.spd;
     setIsPlayerTurn(playerFirst);
     setPhase('battle');
 
     addLog('バトルスタート！');
     if (!playerFirst) {
-      // CPU先攻
       setTimeout(() => doCpuTurn(pTeam, cTeam, 0, 0, diff), 1000);
     }
   };
 
-  const checkGameOver = useCallback((pTeam: BattleMonster[], cTeam: BattleMonster[]): 'player' | 'cpu' | null => {
-    if (pTeam.every(m => m.currentHp <= 0)) return 'cpu';
-    if (cTeam.every(m => m.currentHp <= 0)) return 'player';
-    return null;
-  }, []);
-
-  const doAttack = (attacker: BattleMonster, defender: BattleMonster, isSkill: boolean, isPlayer: boolean) => {
-    const { damage, multiplier } = calcDamage(attacker, defender, isSkill);
-    defender.currentHp = Math.max(0, defender.currentHp - damage);
+  const doAttack = (attacker: BattleMonster, defender: BattleMonster, isSkill: boolean, isPlayer: boolean, quizBoost: boolean = false) => {
+    const { damage: baseDamage, multiplier } = calcDamage(attacker, defender, isSkill);
+    const finalDamage = quizBoost ? Math.floor(baseDamage * 1.5) : baseDamage;
+    defender.currentHp = Math.max(0, defender.currentHp - finalDamage);
 
     const actionName = isSkill ? attacker.card.skill : 'こうげき';
-    let msg = `${attacker.card.name}の ${actionName}！ ${damage}ダメージ！`;
+    let msg = `${attacker.card.name}の ${actionName}！ ${finalDamage}ダメージ！`;
+    if (quizBoost) msg += ' ひらがなブースト！';
     if (multiplier > 1) msg += ' こうかばつぐん！';
     if (multiplier < 1) msg += ' こうかいまひとつ...';
 
@@ -96,11 +99,11 @@ export default function BattlePage() {
 
     if (isPlayer) {
       setShakeCpu(true);
-      setDamagePopCpu(damage);
+      setDamagePopCpu(finalDamage);
       setTimeout(() => { setShakeCpu(false); setDamagePopCpu(null); }, 500);
     } else {
       setShakePlayer(true);
-      setDamagePopPlayer(damage);
+      setDamagePopPlayer(finalDamage);
       setTimeout(() => { setShakePlayer(false); setDamagePopPlayer(null); }, 500);
     }
 
@@ -108,7 +111,7 @@ export default function BattlePage() {
       addLog(`${defender.card.name}は たおれた！`, 'ko');
     }
 
-    return damage;
+    return finalDamage;
   };
 
   const findNextAlive = (team: BattleMonster[], currentIdx: number): number => {
@@ -118,43 +121,69 @@ export default function BattlePage() {
     return -1;
   };
 
-  const handlePlayerAction = (action: 'attack' | 'skill', switchIdx?: number) => {
+  // クイズ表示 → 回答後に攻撃実行
+  const handlePlayerAction = (action: 'attack' | 'skill') => {
     if (!isPlayerTurn || battleOver || processing) return;
-    setProcessing(true);
+    setPendingAction(action);
+    setQuiz(generateQuiz());
+    setQuizResult(null);
+  };
 
+  const handleQuizAnswer = (choiceIndex: number) => {
+    if (!quiz || !pendingAction) return;
+    const correct = choiceIndex === quiz.correctIndex;
+    setQuizResult(correct ? 'correct' : 'wrong');
+    setQuizScore(prev => ({
+      correct: prev.correct + (correct ? 1 : 0),
+      total: prev.total + 1,
+    }));
+
+    if (correct) {
+      addLog(`⭕ 「${quiz.question.word}」せいかい！ パワーアップ！`, 'info');
+    } else {
+      addLog(`❌ 「${quiz.question.emoji} ${quiz.question.word}」は「${quiz.question.char}」！`, 'info');
+    }
+
+    // 少し待ってから攻撃実行
+    setTimeout(() => {
+      executeAttack(pendingAction, correct);
+      setQuiz(null);
+      setPendingAction(null);
+      setQuizResult(null);
+    }, 800);
+  };
+
+  const executeAttack = (action: 'attack' | 'skill', quizCorrect: boolean) => {
+    setProcessing(true);
     const pTeam = [...playerTeam];
     const cTeam = [...cpuTeam];
-    let pIdx = playerActive;
+    const pIdx = playerActive;
     let cIdx = cpuActive;
 
-    if (action === 'attack' || action === 'skill') {
-      doAttack(pTeam[pIdx], cTeam[cIdx], action === 'skill', true);
+    doAttack(pTeam[pIdx], cTeam[cIdx], action === 'skill', true, quizCorrect);
 
-      if (cTeam[cIdx].currentHp <= 0) {
-        const next = findNextAlive(cTeam, cIdx);
-        if (next === -1) {
-          // プレイヤー勝利
-          setPlayerTeam(pTeam);
-          setCpuTeam(cTeam);
-          setBattleOver(true);
-          setWon(true);
-          recordWin();
-          addLog('やった！ しょうり！', 'info');
-          setPhase('result');
-          setProcessing(false);
-          return;
-        }
-        setCpuActive(next);
-        cIdx = next;
-        addLog(`あいての ${cTeam[next].card.name}が とうじょう！`, 'info');
+    if (cTeam[cIdx].currentHp <= 0) {
+      const next = findNextAlive(cTeam, cIdx);
+      if (next === -1) {
+        setPlayerTeam(pTeam);
+        setCpuTeam(cTeam);
+        setBattleOver(true);
+        setWon(true);
+        recordWin();
+        addLog('やった！ しょうり！', 'info');
+        setPhase('result');
+        setProcessing(false);
+        return;
       }
+      setCpuActive(next);
+      cIdx = next;
+      addLog(`あいての ${cTeam[next].card.name}が とうじょう！`, 'info');
     }
 
     setPlayerTeam([...pTeam]);
     setCpuTeam([...cTeam]);
     setIsPlayerTurn(false);
 
-    // CPU turn
     setTimeout(() => doCpuTurn(pTeam, cTeam, pIdx, cIdx, difficulty), 1200);
   };
 
@@ -176,7 +205,6 @@ export default function BattlePage() {
     if (result.action === 'switch' && result.switchIndex !== undefined) {
       addLog(`あいては ${cTeam[result.switchIndex].card.name}に こうたい！`, 'info');
       setCpuActive(result.switchIndex);
-      cIdx = result.switchIndex;
     } else {
       doAttack(cTeam[cIdx], pTeam[pIdx], result.action === 'skill', false);
 
@@ -279,15 +307,57 @@ export default function BattlePage() {
     const cMon = cpuTeam[cpuActive];
 
     return (
-      <div className="min-h-dvh flex flex-col p-2 gap-2">
-        {/* CPU側 */}
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1">
-            {cpuTeam.map((m, i) => (
-              <div key={i} className={`w-3 h-3 rounded-full ${m.currentHp > 0 ? 'bg-red-500' : 'bg-gray-700'}`} />
-            ))}
+      <div className="min-h-dvh flex flex-col p-2 gap-2 relative">
+        {/* ひらがなクイズオーバーレイ */}
+        {quiz && (
+          <div className="absolute inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-900 rounded-2xl p-6 max-w-sm w-full fade-in border border-cyan-800">
+              <div className="text-center mb-4">
+                <div className="text-xs text-cyan-400 mb-1">ひらがなクイズ！ せいかいで パワーアップ！</div>
+                <div className="text-5xl mb-2">{quiz.question.emoji}</div>
+                <div className="text-lg font-bold">
+                  「<span className="text-yellow-400">{quiz.question.word}</span>」の
+                  さいしょの もじは？
+                </div>
+              </div>
+
+              {quizResult ? (
+                <div className={`text-center text-3xl font-bold py-4 ${quizResult === 'correct' ? 'text-green-400' : 'text-red-400'}`}>
+                  {quizResult === 'correct' ? '⭕ せいかい！' : `❌ こたえは「${quiz.question.char}」`}
+                  {quizResult === 'correct' && (
+                    <div className="text-sm text-cyan-400 mt-1">ダメージ 1.5ばい！</div>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {quiz.choices.map((choice, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleQuizAnswer(i)}
+                      className="py-4 rounded-xl bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all text-3xl font-bold"
+                    >
+                      {choice}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-          <span className="text-xs text-gray-400">あいてのチーム</span>
+        )}
+
+        {/* CPU側 */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1">
+              {cpuTeam.map((m, i) => (
+                <div key={i} className={`w-3 h-3 rounded-full ${m.currentHp > 0 ? 'bg-red-500' : 'bg-gray-700'}`} />
+              ))}
+            </div>
+            <span className="text-xs text-gray-400">あいて</span>
+          </div>
+          <div className="text-xs text-gray-500">
+            ひらがな {quizScore.correct}/{quizScore.total}
+          </div>
         </div>
 
         <div className={`flex justify-center relative ${shakeCpu ? 'shake' : ''}`}>
@@ -330,7 +400,7 @@ export default function BattlePage() {
               <div key={i} className={`w-3 h-3 rounded-full ${m.currentHp > 0 ? 'bg-cyan-500' : 'bg-gray-700'}`} />
             ))}
           </div>
-          <span className="text-xs text-gray-400">じぶんのチーム</span>
+          <span className="text-xs text-gray-400">じぶん</span>
         </div>
 
         {/* アクションボタン */}
@@ -361,23 +431,27 @@ export default function BattlePage() {
 
         {/* 交代ボタン */}
         <div className="flex gap-2">
-          {playerTeam.map((m, i) => (
-            i !== playerActive && (
+          {playerTeam.map((m, i) => {
+            const imgId = String(m.card.id).padStart(3, '0');
+            return i !== playerActive ? (
               <button
                 key={i}
                 onClick={() => handleSwitch(i)}
                 disabled={!isPlayerTurn || m.currentHp <= 0 || processing}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1 justify-center ${
                   isPlayerTurn && m.currentHp > 0 && !processing
                     ? 'bg-gray-700 hover:bg-gray-600 active:scale-95'
                     : 'bg-gray-800 text-gray-600'
                 }`}
               >
-                🔄 {m.card.emoji} {m.card.name}
-                <div className="text-[10px] text-gray-400">HP {m.currentHp}/{m.card.hp}</div>
+                <Image src={`/monsters/monster_${imgId}.png`} alt={m.card.name} width={24} height={24} className="object-contain" unoptimized />
+                <div>
+                  <div>{m.card.name}</div>
+                  <div className="text-[10px] text-gray-400">HP {m.currentHp}/{m.card.hp}</div>
+                </div>
               </button>
-            )
-          ))}
+            ) : null;
+          })}
         </div>
       </div>
     );
@@ -390,6 +464,21 @@ export default function BattlePage() {
       <h1 className={`text-3xl font-bold ${won ? 'text-yellow-400' : 'text-gray-400'}`}>
         {won ? 'しょうり！' : 'ざんねん...'}
       </h1>
+
+      {/* ひらがなスコア */}
+      {quizScore.total > 0 && (
+        <div className="bg-gray-800 rounded-xl p-3 text-center">
+          <div className="text-xs text-gray-400">ひらがなクイズ</div>
+          <div className="text-lg font-bold text-cyan-400">
+            {quizScore.correct}/{quizScore.total} せいかい
+            {quizScore.total > 0 && (
+              <span className="text-sm ml-1">
+                ({Math.round((quizScore.correct / quizScore.total) * 100)}%)
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {won && (
         <div className="bg-gray-800 rounded-xl p-4 text-center">

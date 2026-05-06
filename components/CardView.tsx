@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { Card } from '@/lib/types';
 import { ATTR_NAMES, ATTR_COLORS, ATTR_TEXT_COLORS } from '@/lib/cards';
 
@@ -19,10 +20,10 @@ export default function CardView({ card, size = 'md', selected, onClick, showSta
     lg: 'w-36 h-52 text-base',
   };
 
-  const emojiSizes = {
-    sm: 'text-2xl',
-    md: 'text-4xl',
-    lg: 'text-5xl',
+  const imgSizes = {
+    sm: { w: 40, h: 40 },
+    md: { w: 64, h: 64 },
+    lg: { w: 80, h: 80 },
   };
 
   const rarityStyles = {
@@ -33,6 +34,7 @@ export default function CardView({ card, size = 'md', selected, onClick, showSta
 
   const hp = currentHp ?? card.hp;
   const hpPercent = Math.max(0, (hp / card.hp) * 100);
+  const imgId = String(card.id).padStart(3, '0');
 
   return (
     <div
@@ -62,7 +64,16 @@ export default function CardView({ card, size = 'md', selected, onClick, showSta
         </span>
       </div>
 
-      <div className={`${emojiSizes[size]} relative z-10`}>{card.emoji}</div>
+      <div className="relative z-10">
+        <Image
+          src={`/monsters/monster_${imgId}.png`}
+          alt={card.name}
+          width={imgSizes[size].w}
+          height={imgSizes[size].h}
+          className="object-contain drop-shadow-lg"
+          unoptimized
+        />
+      </div>
 
       <div className="w-full text-center relative z-10">
         <div className={`font-bold truncate ${ATTR_TEXT_COLORS[card.attr]} ${size === 'sm' ? 'text-[9px]' : 'text-[11px]'}`}>
