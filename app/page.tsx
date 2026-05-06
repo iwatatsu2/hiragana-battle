@@ -58,6 +58,11 @@ export default function Home() {
             <span className="text-xs ml-2 opacity-80">({data.tickets}まい)</span>
           </button>
         </Link>
+        <Link href="/numbers" className="block">
+          <button className="w-full py-4 rounded-xl bg-gradient-to-r from-pink-600 to-rose-500 text-white font-bold text-lg hover:from-pink-500 hover:to-rose-400 active:scale-95 transition-all shadow-lg shadow-pink-900/50">
+            🔢 すうじゲーム
+          </button>
+        </Link>
         <Link href="/collection" className="block">
           <button className="w-full py-4 rounded-xl bg-gradient-to-r from-green-600 to-teal-600 text-white font-bold text-lg hover:from-green-500 hover:to-teal-500 active:scale-95 transition-all shadow-lg shadow-green-900/50">
             📖 ずかん
