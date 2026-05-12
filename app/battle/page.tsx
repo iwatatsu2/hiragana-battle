@@ -121,12 +121,26 @@ export default function BattlePage() {
     return -1;
   };
 
+  // 音声読み上げ
+  const speakWord = (word: string) => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(word);
+      u.lang = 'ja-JP';
+      u.rate = 0.8;
+      window.speechSynthesis.speak(u);
+    }
+  };
+
   // クイズ表示 → 回答後に攻撃実行
   const handlePlayerAction = (action: 'attack' | 'skill') => {
     if (!isPlayerTurn || battleOver || processing) return;
     setPendingAction(action);
-    setQuiz(generateQuiz());
+    const q = generateQuiz();
+    setQuiz(q);
     setQuizResult(null);
+    // 少し待ってから読み上げ
+    setTimeout(() => speakWord(q.question.word), 300);
   };
 
   const handleQuizAnswer = (choiceIndex: number) => {
@@ -236,14 +250,14 @@ export default function BattlePage() {
   // チーム選択画面
   if (phase === 'select') {
     return (
-      <div className="min-h-dvh p-4 flex flex-col">
-        <div className="flex items-center justify-between mb-4">
+      <div className="h-dvh p-4 flex flex-col">
+        <div className="flex items-center justify-between mb-4 shrink-0">
           <Link href="/" className="text-gray-400 text-sm">← もどる</Link>
           <h1 className="text-lg font-bold">チームをえらぼう（3たい）</h1>
           <div className="text-cyan-400 text-sm">{selectedIds.length}/3</div>
         </div>
 
-        <div className="grid grid-cols-4 gap-2 flex-1 overflow-y-auto pb-20">
+        <div className="grid grid-cols-4 gap-2 overflow-y-auto flex-1 min-h-0 content-start">
           {myCards.map(card => (
             <CardView
               key={card.id}
@@ -256,7 +270,7 @@ export default function BattlePage() {
         </div>
 
         {myCards.length < 3 && (
-          <div className="text-center text-yellow-400 text-sm mb-2">
+          <div className="text-center text-yellow-400 text-sm my-2 shrink-0">
             カードが たりません。ガチャで ふやそう！
           </div>
         )}
@@ -264,7 +278,7 @@ export default function BattlePage() {
         <button
           onClick={() => selectedIds.length === 3 && setPhase('difficulty')}
           disabled={selectedIds.length !== 3}
-          className={`fixed bottom-4 left-4 right-4 py-4 rounded-xl font-bold text-lg transition-all ${
+          className={`shrink-0 mt-2 py-4 rounded-xl font-bold text-lg transition-all ${
             selectedIds.length === 3
               ? 'bg-gradient-to-r from-blue-600 to-purple-600 active:scale-95'
               : 'bg-gray-700 text-gray-500'
@@ -315,10 +329,15 @@ export default function BattlePage() {
               <div className="text-center mb-4">
                 <div className="text-xs text-cyan-400 mb-1">ひらがなクイズ！ せいかいで パワーアップ！</div>
                 <div className="text-5xl mb-2">{quiz.question.emoji}</div>
-                <div className="text-lg font-bold">
-                  「<span className="text-yellow-400">{quiz.question.word}</span>」の
+                <div className="text-lg font-bold mb-2">
                   さいしょの もじは？
                 </div>
+                <button
+                  onClick={() => speakWord(quiz.question.word)}
+                  className="px-4 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-600 active:scale-95 transition-all text-sm"
+                >
+                  🔊 もういちど きく
+                </button>
               </div>
 
               {quizResult ? (
