@@ -132,6 +132,17 @@ export default function BattlePage() {
     }
   };
 
+  // 1文字だけ読み上げ
+  const speakChar = (char: string) => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(char);
+      u.lang = 'ja-JP';
+      u.rate = 0.7;
+      window.speechSynthesis.speak(u);
+    }
+  };
+
   // クイズ表示 → 回答後に攻撃実行
   const handlePlayerAction = (action: 'attack' | 'skill') => {
     if (!isPlayerTurn || battleOver || processing) return;
@@ -348,17 +359,24 @@ export default function BattlePage() {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {quiz.choices.map((choice, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleQuizAnswer(i)}
-                      className="py-4 rounded-xl bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all text-3xl font-bold"
-                    >
-                      {choice}
-                    </button>
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    {quiz.choices.map((choice, i) => (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          speakChar(choice);
+                          handleQuizAnswer(i);
+                        }}
+                        className="py-4 rounded-xl bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all text-2xl font-bold flex flex-col items-center gap-1"
+                      >
+                        <span className="text-3xl">🔊</span>
+                        <span className="text-xs text-gray-400">{i + 1}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-center text-xs text-gray-500 mt-2">ボタンを おして おとを きいてね</p>
+                </>
               )}
             </div>
           </div>
