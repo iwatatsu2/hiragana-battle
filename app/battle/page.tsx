@@ -370,8 +370,8 @@ export default function BattlePage() {
                         }}
                         className="py-4 rounded-xl bg-gray-700 hover:bg-gray-600 active:scale-95 transition-all text-2xl font-bold flex flex-col items-center gap-1"
                       >
-                        <span className="text-3xl">🔊</span>
-                        <span className="text-xs text-gray-400">{i + 1}</span>
+                        <span className="text-4xl">{choice}</span>
+                        <span className="text-xs text-gray-400">🔊</span>
                       </button>
                     ))}
                   </div>
