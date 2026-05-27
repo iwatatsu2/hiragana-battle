@@ -15,7 +15,16 @@ export default function Home() {
   if (!data) return null;
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-dvh p-4 gap-6">
+    <div className="relative flex flex-col items-center justify-center min-h-dvh p-4 gap-6">
+      {/* 制作者ボタン */}
+      <Link
+        href="/about"
+        className="absolute top-4 right-4 flex items-center gap-1.5 rounded-full bg-gray-800 border border-gray-700 px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors z-10"
+      >
+        <span>👨‍⚕️</span>
+        <span>Dr.いわたつ</span>
+      </Link>
+
       {/* タイトル */}
       <div className="text-center fade-in">
         <div className="text-6xl mb-2">⚔️</div>
