@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { loadData } from '@/lib/storage';
 import { SaveData } from '@/lib/types';
 
@@ -21,7 +22,7 @@ export default function Home() {
         href="/about"
         className="absolute top-4 right-4 flex items-center gap-1.5 rounded-full bg-gray-800 border border-gray-700 px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors z-10"
       >
-        <span>👨‍⚕️</span>
+        <Image src="/dr-iwatatsu.png" alt="Dr.いわたつ" width={20} height={20} className="rounded-full" />
         <span>Dr.いわたつ</span>
       </Link>
 
